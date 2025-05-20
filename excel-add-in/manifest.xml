@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<OfficeApp
+        xmlns="http://schemas.microsoft.com/office/appforoffice/1.1"
+        xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+        xmlns:bt="http://schemas.microsoft.com/office/officeappbasictypes/1.0"
+        xsi:type="ContentApp">
+
+  <!-- Begin Basic Settings: Add-in metadata, used for all versions of Office unless override provided. -->
+  <Id>57c7366b-dcf7-421a-aec0-1748a7179b7f</Id>
+  <Version>1.0.0.0</Version>
+  <ProviderName>[Provider name]</ProviderName>
+  <DefaultLocale>en-US</DefaultLocale>
+  <DisplayName DefaultValue="Data Sync Add-in" />
+  <Description DefaultValue="Synchronize data between Excel and your API"/>
+
+  <!-- Domains that will be allowed when navigating. -->
+  <AppDomains>
+    <AppDomain>localhost</AppDomain>
+    <!-- Add your production domains when ready -->
+  </AppDomains>
+
+  <Hosts>
+    <Host Name="Workbook" />
+  </Hosts>
+
+  <DefaultSettings>
+    <SourceLocation DefaultValue="https://localhost:3000/taskpane.html" />
+    <!-- Smaller initial size for better placement -->
+    <RequestedWidth>300</RequestedWidth>
+    <RequestedHeight>220</RequestedHeight>
+    <RequestedStartRow>20</RequestedStartRow>  <!-- Starts at a lower row -->
+    <RequestedStartColumn>10</RequestedStartColumn>
+  </DefaultSettings>
+
+  <!-- 
+    ContentResources allows the add-in to be placed in a specific location and
+    enables the user to move and resize it
+  -->
+  <ContentResources>
+    <Icons>
+      <Icon>
+        <bt:Image size="16" resid="icon1_16x16" />
+        <bt:Image size="32" resid="icon1_32x32" />
+        <bt:Image size="64" resid="icon1_64x64" />
+        <bt:Image size="80" resid="icon1_80x80" />
+      </Icon>
+    </Icons>
+    <bt:Images>
+      <bt:Image id="icon1_16x16" DefaultValue="https://localhost:3000/assets/icon-16.png" />
+      <bt:Image id="icon1_32x32" DefaultValue="https://localhost:3000/assets/icon-32.png" />
+      <bt:Image id="icon1_64x64" DefaultValue="https://localhost:3000/assets/icon-64.png" />
+      <bt:Image id="icon1_80x80" DefaultValue="https://localhost:3000/assets/icon-80.png" />
+    </bt:Images>
+  </ContentResources>
+
+  <Permissions>ReadWriteDocument</Permissions>
+
+</OfficeApp>

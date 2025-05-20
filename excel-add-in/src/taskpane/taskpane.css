@@ -1,0 +1,133 @@
+body {
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+    margin: 0;
+    padding: 0;
+    background-color: #f3f3f3;
+    height: 100vh;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    overflow: hidden;
+}
+
+.container {
+    width: 100%;
+    height: 100%;
+    background-color: white;
+    display: flex;
+    flex-direction: column;
+    padding: 12px;
+    box-sizing: border-box;
+}
+
+h1 {
+    font-size: 18px;
+    margin: 0 0 10px 0;
+    color: #333;
+    flex: 0 0 auto;
+}
+
+.sync-button {
+    background-color: #0078d4;
+    color: white;
+    border: none;
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    margin: 0 0 10px 0;
+    transition: background-color 0.2s;
+    flex: 0 0 auto;
+}
+
+.sync-button:hover {
+    background-color: #106ebe;
+}
+
+.sync-button:active {
+    background-color: #005a9e;
+}
+
+.sync-button .icon {
+    font-size: 16px;
+    margin-right: 6px;
+}
+
+.status {
+    padding: 8px;
+    border-radius: 4px;
+    font-size: 12px;
+    background-color: #f0f0f0;
+    color: #333;
+    flex: 1 1 auto;
+    overflow-y: auto;
+    margin-bottom: 0;
+}
+
+.success {
+    background-color: #dff6dd;
+    color: #107c10;
+}
+
+.error {
+    background-color: #fde7e9;
+    color: #a80000;
+}
+
+.logo-emoji {
+    font-size: 36px;
+    line-height: 1;
+}
+
+.button-group {
+    display: flex;
+    gap: 10px;
+    margin-bottom: 15px;
+    flex: 0 0 auto;
+}
+
+.button {
+    border: none;
+    border-radius: 4px;
+    padding: 8px 15px;
+    font-size: 14px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: background-color 0.2s;
+}
+
+.primary {
+    background-color: #0078d4;
+    color: white;
+}
+
+.primary:hover {
+    background-color: #106ebe;
+}
+
+.primary:active {
+    background-color: #005a9e;
+}
+
+.secondary {
+    background-color: #f3f2f1;
+    color: #323130;
+}
+
+.secondary:hover {
+    background-color: #edebe9;
+}
+
+.secondary:active {
+    background-color: #e1dfdd;
+}
+
+.button .icon {
+    font-size: 16px;
+    margin-right: 8px;
+}
