@@ -16,6 +16,7 @@
   "dependencies": {
     "@microsoft/office-js": "^1.1.0",
     "core-js": "^3.29.1",
+    "office-addin-usage-data": "^2.0.3",
     "regenerator-runtime": "^0.13.11"
   },
   "devDependencies": {

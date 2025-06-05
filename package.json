@@ -4,10 +4,10 @@
   "description": "Excel integration with REST API",
   "scripts": {
     "start:api": "cd api && npm run dev",
-    "start:addin": "cd excel-addin && npm start",
+    "start:addin": "cd excel-add-in && npm start",
     "start": "concurrently \"npm run start:api\" \"npm run start:addin\"",
     "build:api": "cd api && npm run build",
-    "build:addin": "cd excel-addin && npm run build",
+    "build:addin": "cd excel-add-in && npm run build",
     "build": "npm run build:api && npm run build:addin"
   },
   "devDependencies": {

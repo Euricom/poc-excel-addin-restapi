@@ -1,30 +1,37 @@
 <!DOCTYPE html>
 <html>
-    <head>
-        <meta charset="UTF-8" />
-        <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
-        <meta name="viewport" content="width=device-width, initial-scale=1">
-        <title>Product Data Sync</title>
-    
-        <!-- Office JavaScript API -->
-        <script type="text/javascript" src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"></script>
-    
-        <!-- Add your CSS here -->
-        <link rel="stylesheet" href="taskpane.css">
-    </head>
-    <body>
-        <div class="container">
-            <h1>Product Data</h1>
-            <p class="description">Sync product data with your database</p>
-        
-            <div class="button-group">
-                <button id="fetchData" class="button primary">
-                    <span class="icon">↻</span>
-                    <span class="label">Sync Data</span>
-                </button>
-            </div>
-        
-            <div id="status" class="status">Ready to sync</div>
-        </div>
-    </body>
+  <head>
+    <meta charset="UTF-8" />
+    <meta http-equiv="X-UA-Compatible" content="IE=Edge" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Product Data Sync</title>
+
+    <!-- Office JavaScript API -->
+    <script
+      type="text/javascript"
+      src="https://appsforoffice.microsoft.com/lib/1/hosted/office.js"
+    ></script>
+
+    <!-- Add your CSS here -->
+    <link rel="stylesheet" href="taskpane.css" />
+  </head>
+  <body>
+    <div class="container">
+      <h1>Product Data</h1>
+      <p class="description">Sync product data with your database</p>
+
+      <div class="button-group">
+        <button id="fetchData" class="button primary">
+          <span class="icon">↻</span>
+          <span class="label">Sync Data</span>
+        </button>
+        <button id="fetchData2" class="button primary">
+          <span class="icon">↻</span>
+          <span class="label">Sync Data 2</span>
+        </button>
+      </div>
+
+      <div id="status" class="status">Ready to sync</div>
+    </div>
+  </body>
 </html>
