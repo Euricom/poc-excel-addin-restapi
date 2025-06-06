@@ -6,6 +6,9 @@
 /* global document, Office, Excel */
 
 // API configuration
+import { updateStatus } from '../utils/taskpaneUtils'
+import { syncData2 } from './syncData2'
+
 const API_BASE_URL = 'http://localhost:3001/api'
 
 interface Product {
@@ -14,67 +17,8 @@ interface Product {
   price: number
 }
 
-interface ComplexProduct {
-  id: number
-  name: string
-  category: string
-  price: number
-  quantity: number
-  rating: number
-  inStock: boolean
-  dateAdded: string
-  description: string
-  tags: string[]
-  // Additional columns to reach 50 total
-  color: string
-  weight: number
-  dimensions: string
-  manufacturer: string
-  countryOfOrigin: string
-  warranty: string
-  material: string
-  sku: string
-  barcode: string
-  minOrderQuantity: number
-  maxOrderQuantity: number
-  discountPercentage: number
-  taxRate: number
-  shippingWeight: number
-  shippingDimensions: string
-  returnPolicy: string
-  assemblyRequired: boolean
-  batteryRequired: boolean
-  batteriesIncluded: boolean
-  waterproof: boolean
-  heatResistant: boolean
-  coldResistant: boolean
-  uvResistant: boolean
-  windResistant: boolean
-  shockResistant: boolean
-  dustResistant: boolean
-  scratchResistant: boolean
-  stainResistant: boolean
-  fadeResistant: boolean
-  rustResistant: boolean
-  moldResistant: boolean
-  fireResistant: boolean
-  recyclable: boolean
-  biodegradable: boolean
-  energyEfficiencyRating: string
-  noiseLevel: string
-  powerConsumption: number
-  certifications: string[]
-  // Adding 2 more columns to reach exactly 50
-  lastUpdated: string
-  popularity: number
-}
-
 interface ApiResponse {
   products: Product[]
-}
-
-interface ComplexApiResponse {
-  products: ComplexProduct[]
 }
 
 interface CellUpdateRequest {
@@ -102,7 +46,6 @@ interface FormulasResponse {
 }
 
 let data: ApiResponse = { products: [] }
-let complexData: ComplexApiResponse = { products: [] }
 
 // Initialize Office.js
 Office.onReady(info => {
@@ -269,249 +212,6 @@ async function syncData(): Promise<void> {
 /**
  * Synchronize complex data from API to Excel
  */
-async function syncData2(): Promise<void> {
-  try {
-    updateStatus('Fetching complex data from API...')
-
-    // Call the complex data API endpoint
-    const response = await fetch(`${API_BASE_URL}/data2`)
-
-    if (!response.ok) {
-      throw new Error(`API error: ${response.status} ${response.statusText}`)
-    }
-
-    complexData = await response.json()
-
-    console.log('API response (complex data):', complexData)
-
-    updateStatus('Writing complex data to Excel...')
-
-    // Write data to Excel
-    await Excel.run(async context => {
-      const sheet = context.workbook.worksheets.getActiveWorksheet()
-
-      // Clear previous event handlers to avoid duplicates
-      sheet.onChanged.remove(handleCellChange)
-
-      // Create a header row with all 50 columns
-      const headerRange = sheet.getRange('A1:AX1')
-      headerRange.values = [
-        [
-          'ID',
-          'Product Name',
-          'Category',
-          'Price',
-          'Quantity',
-          'Rating',
-          'In Stock',
-          'Date Added',
-          'Description',
-          'Tags',
-          // Additional columns
-          'Color',
-          'Weight',
-          'Dimensions',
-          'Manufacturer',
-          'Country of Origin',
-          'Warranty',
-          'Material',
-          'SKU',
-          'Barcode',
-          'Min Order Quantity',
-          'Max Order Quantity',
-          'Discount Percentage',
-          'Tax Rate',
-          'Shipping Weight',
-          'Shipping Dimensions',
-          'Return Policy',
-          'Assembly Required',
-          'Battery Required',
-          'Batteries Included',
-          'Waterproof',
-          'Heat Resistant',
-          'Cold Resistant',
-          'UV Resistant',
-          'Wind Resistant',
-          'Shock Resistant',
-          'Dust Resistant',
-          'Scratch Resistant',
-          'Stain Resistant',
-          'Fade Resistant',
-          'Rust Resistant',
-          'Mold Resistant',
-          'Fire Resistant',
-          'Recyclable',
-          'Biodegradable',
-          'Energy Efficiency Rating',
-          'Noise Level',
-          'Power Consumption',
-          'Certifications',
-          // Adding 2 more columns to reach exactly 50
-          'Last Updated',
-          'Popularity'
-        ]
-      ]
-      headerRange.format.font.bold = true
-
-      // Write data rows
-      if (complexData.products && complexData.products.length > 0) {
-        const dataRange = sheet.getRange(
-          `A2:AX${complexData.products.length + 1}`
-        )
-        dataRange.values = complexData.products.map(product => [
-          product.id,
-          product.name,
-          product.category,
-          product.price,
-          product.quantity,
-          product.rating,
-          product.inStock,
-          product.dateAdded,
-          product.description,
-          product.tags.join(', '),
-          // Additional columns
-          product.color,
-          product.weight,
-          product.dimensions,
-          product.manufacturer,
-          product.countryOfOrigin,
-          product.warranty,
-          product.material,
-          product.sku,
-          product.barcode,
-          product.minOrderQuantity,
-          product.maxOrderQuantity,
-          product.discountPercentage,
-          product.taxRate,
-          product.shippingWeight,
-          product.shippingDimensions,
-          product.returnPolicy,
-          product.assemblyRequired,
-          product.batteryRequired,
-          product.batteriesIncluded,
-          product.waterproof,
-          product.heatResistant,
-          product.coldResistant,
-          product.uvResistant,
-          product.windResistant,
-          product.shockResistant,
-          product.dustResistant,
-          product.scratchResistant,
-          product.stainResistant,
-          product.fadeResistant,
-          product.rustResistant,
-          product.moldResistant,
-          product.fireResistant,
-          product.recyclable,
-          product.biodegradable,
-          product.energyEfficiencyRating,
-          product.noiseLevel,
-          product.powerConsumption,
-          product.certifications.join(', '),
-          // Adding 2 more columns to reach exactly 50
-          product.lastUpdated,
-          product.popularity
-        ])
-
-        // Format price column as currency
-        const priceRange = sheet.getRange(
-          `D2:D${complexData.products.length + 1}`
-        )
-        priceRange.numberFormat = [['$#,##0.00']]
-
-        // Format date column
-        const dateRange = sheet.getRange(
-          `H2:H${complexData.products.length + 1}`
-        )
-        dateRange.numberFormat = [['yyyy-mm-dd']]
-
-        // Format boolean columns (In Stock and other boolean properties)
-        const booleanColumns = [
-          'G',
-          'AA',
-          'AB',
-          'AC',
-          'AD',
-          'AE',
-          'AF',
-          'AG',
-          'AH',
-          'AI',
-          'AJ',
-          'AK',
-          'AL',
-          'AM',
-          'AN',
-          'AO',
-          'AP',
-          'AQ',
-          'AR'
-        ]
-        booleanColumns.forEach(column => {
-          const booleanRange = sheet.getRange(
-            `${column}2:${column}${complexData.products.length + 1}`
-          )
-          booleanRange.numberFormat = [['@']]
-        })
-
-        // Format additional numeric columns
-        const weightRange = sheet.getRange(
-          `L2:L${complexData.products.length + 1}`
-        )
-        weightRange.numberFormat = [['0.00']]
-
-        const percentageRange = sheet.getRange(
-          `W2:W${complexData.products.length + 1}`
-        )
-        percentageRange.numberFormat = [['0.00%']]
-
-        const taxRateRange = sheet.getRange(
-          `X2:X${complexData.products.length + 1}`
-        )
-        taxRateRange.numberFormat = [['0.00%']]
-
-        const shippingWeightRange = sheet.getRange(
-          `Y2:Y${complexData.products.length + 1}`
-        )
-        shippingWeightRange.numberFormat = [['0.00']]
-
-        const powerConsumptionRange = sheet.getRange(
-          `AW2:AW${complexData.products.length + 1}`
-        )
-        powerConsumptionRange.numberFormat = [['0.00 W']]
-
-        // Format the two new columns
-        const lastUpdatedRange = sheet.getRange(
-          `AW2:AW${complexData.products.length + 1}`
-        )
-        lastUpdatedRange.numberFormat = [['yyyy-mm-dd']]
-
-        const popularityRange = sheet.getRange(
-          `AX2:AX${complexData.products.length + 1}`
-        )
-        popularityRange.numberFormat = [['0.00']]
-      }
-
-      // Format table for readability
-      sheet.getUsedRange().format.autofitColumns()
-
-      // Register a cell change event handler
-      // Note: We're using the same handler as syncData for now
-      sheet.onChanged.add(handleCellChange)
-
-      await context.sync()
-
-      updateStatus(
-        `Complex data synchronized successfully! (${complexData.products.length} products)`
-      )
-    })
-  } catch (error) {
-    const errorMessage =
-      error instanceof Error ? error.message : 'Unknown error'
-    updateStatus(`Error: ${errorMessage}`, true)
-    console.error('Complex data sync error:', error)
-  }
-}
 
 /**
  * Handle cell changes and send updates to API
@@ -663,16 +363,5 @@ async function sendUpdateToApi(updateData: CellUpdateRequest): Promise<void> {
       error instanceof Error ? error.message : 'Unknown error'
     updateStatus(`API Error: ${errorMessage}`, true)
     console.error('API update error:', error)
-  }
-}
-
-/**
- * Update status message in the UI
- */
-function updateStatus(message: string, isError: boolean = false): void {
-  const statusElement = document.getElementById('status')
-  if (statusElement) {
-    statusElement.textContent = message
-    statusElement.className = isError ? 'status error' : 'status success'
   }
 }
