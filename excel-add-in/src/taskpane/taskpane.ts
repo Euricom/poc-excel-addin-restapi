@@ -56,6 +56,7 @@ Office.onReady(info => {
 
     // Initial data load
     syncData2()
+    syncData()
   }
 })
 

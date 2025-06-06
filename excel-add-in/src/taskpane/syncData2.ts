@@ -3,10 +3,15 @@ import { updateStatus } from '../utils/taskpaneUtils'
 import { ComplexApiResponse } from '../types/complexProduct'
 import {
   COMPLEX_PRODUCT_HEADERS,
-  productToRow,
   productsToRows
 } from '../utils/complexProductUtils'
 import { timeAsync, logPerformanceReport } from '../utils/performanceUtils'
+import {
+  processRangeInChunks,
+  processItemsInChunks,
+  ChunkingProgress,
+  CHUNKING_CONFIG
+} from '../utils/chunkingUtils'
 
 const API_BASE_URL = 'http://localhost:3001/api'
 
@@ -88,6 +93,8 @@ async function fetchComplexDataWithCaching(): Promise<void> {
 
 /**
  * Writes data to Excel with optimized batching and formatting
+ * Uses chunking strategy for large datasets to prevent 5MB payload limit
+ * Writes to a second sheet, creating it if it doesn't exist
  */
 async function writeDataToExcel(): Promise<void> {
   if (!complexDataCache.products || complexDataCache.products.length === 0) {
@@ -98,8 +105,21 @@ async function writeDataToExcel(): Promise<void> {
   updateStatus('Writing complex data to Excel...')
 
   await Excel.run(async context => {
-    // Get worksheet and clear previous data
-    const sheet = context.workbook.worksheets.getActiveWorksheet()
+    // Get or create a second worksheet
+    let sheet: Excel.Worksheet
+    const worksheets = context.workbook.worksheets
+    worksheets.load('items')
+    await context.sync()
+
+    // Check if there's at least a second sheet
+    if (worksheets.items.length > 1) {
+      // Use the second sheet
+      sheet = worksheets.items[1]
+    } else {
+      // Create a new sheet named "Data Sync 2"
+      sheet = worksheets.add('Data Sync 2')
+      updateStatus('Created new worksheet "Data Sync 2"')
+    }
 
     // Remove previous event handler to avoid duplicates
     sheet.onChanged.remove(handleComplexCellChange)
@@ -119,15 +139,43 @@ async function writeDataToExcel(): Promise<void> {
       )}ms for ${rowCount} rows`
     )
 
-    // Write all data at once (headers + data)
-    const writeStart = performance.now()
-    const dataRange = sheet.getRange(`A1:AX${rowCount + 1}`)
-    dataRange.values = allRows
-    console.log(
-      `Range values assignment took ${(performance.now() - writeStart).toFixed(
-        2
-      )}ms`
-    )
+    // For small datasets (under threshold), use the original approach
+    if (rowCount <= 100) {
+      // Write all data at once (headers + data)
+      const writeStart = performance.now()
+      const dataRange = sheet.getRange(`A1:AX${rowCount + 1}`)
+      dataRange.values = allRows
+      console.log(
+        `Range values assignment took ${(
+          performance.now() - writeStart
+        ).toFixed(2)}ms`
+      )
+    } else {
+      // For larger datasets, use chunking strategy
+      updateStatus(`Using chunking strategy for ${rowCount} rows...`)
+
+      // Write header row first
+      const headerRange = sheet.getRange('A1:AX1')
+      headerRange.values = [COMPLEX_PRODUCT_HEADERS]
+      await context.sync()
+
+      // Write data rows using chunking
+      await processRangeInChunks(
+        context,
+        sheet,
+        productRows,
+        'A2', // Start at row 2 (after headers)
+        {
+          operationId: `sync_data_${Date.now()}`,
+          onProgress: progress => {
+            const percent = Math.round(
+              (progress.completedChunks / progress.totalChunks) * 100
+            )
+            updateStatus(`Writing data: ${percent}% complete`)
+          }
+        }
+      )
+    }
 
     // Apply all formatting in a single batch
     await timeAsync(
@@ -247,16 +295,27 @@ async function applyFormattingInBatch(
 
 /**
  * Optimized function to handle large datasets by loading them progressively
+ * with advanced chunking, retry logic, and progress tracking.
  * This can be used for very large datasets instead of the standard syncData2
+ * Writes to a second sheet, creating it if it doesn't exist
  */
-export async function syncLargeDataset(): Promise<void> {
+export async function syncLargeDataset(
+  options: {
+    operationId?: string
+    chunkSize?: number
+    resumeFromChunk?: number
+  } = {}
+): Promise<void> {
   try {
     updateStatus('Preparing to sync large dataset...')
+
+    // Generate a unique operation ID if not provided
+    const operationId =
+      options.operationId || `sync_large_dataset_${Date.now()}`
 
     // Fetch data
     await fetchComplexDataWithCaching()
 
-    const BATCH_SIZE = 100 // Process 100 rows at a time
     const products = complexDataCache.products
     const totalProducts = products.length
 
@@ -265,8 +324,41 @@ export async function syncLargeDataset(): Promise<void> {
       return
     }
 
+    // Determine optimal chunk size if not specified
+    const chunkSize =
+      options.chunkSize ||
+      Math.min(
+        Math.max(
+          Math.floor(
+            CHUNKING_CONFIG.MAX_PAYLOAD_SIZE_BYTES /
+              (COMPLEX_PRODUCT_HEADERS.length *
+                CHUNKING_CONFIG.ESTIMATED_BYTES_PER_CELL)
+          ),
+          CHUNKING_CONFIG.MIN_CHUNK_SIZE
+        ),
+        CHUNKING_CONFIG.MAX_CHUNK_SIZE
+      )
+
+    updateStatus(
+      `Syncing ${totalProducts} products with chunk size: ${chunkSize}`
+    )
+
     await Excel.run(async context => {
-      const sheet = context.workbook.worksheets.getActiveWorksheet()
+      // Get or create a second worksheet
+      let sheet: Excel.Worksheet
+      const worksheets = context.workbook.worksheets
+      worksheets.load('items')
+      await context.sync()
+
+      // Check if there's at least a second sheet
+      if (worksheets.items.length > 1) {
+        // Use the second sheet
+        sheet = worksheets.items[1]
+      } else {
+        // Create a new sheet named "Data Sync 2"
+        sheet = worksheets.add('Data Sync 2')
+        updateStatus('Created new worksheet "Data Sync 2"')
+      }
 
       // Remove previous event handler
       sheet.onChanged.remove(handleComplexCellChange)
@@ -275,28 +367,60 @@ export async function syncLargeDataset(): Promise<void> {
       const headerRange = sheet.getRange('A1:AX1')
       headerRange.values = [COMPLEX_PRODUCT_HEADERS]
       headerRange.format.font.bold = true
+      await context.sync()
 
-      // Process data in batches
-      for (let i = 0; i < totalProducts; i += BATCH_SIZE) {
-        const batchEnd = Math.min(i + BATCH_SIZE, totalProducts)
-        const batchProducts = products.slice(i, batchEnd)
-
-        updateStatus(
-          `Processing products ${i + 1} to ${batchEnd} of ${totalProducts}...`
+      // Progress tracking callback
+      const onProgress = (progress: ChunkingProgress) => {
+        const percent = Math.round(
+          (progress.completedChunks / progress.totalChunks) * 100
         )
-
-        // Write batch data
-        const startRow = i + 2 // +2 because row 1 is header
-        const endRow = batchEnd + 1
-        const batchRange = sheet.getRange(`A${startRow}:AX${endRow}`)
-        batchRange.values = productsToRows(batchProducts)
-
-        // Apply minimal formatting for this batch
-        sheet.getRange(`D${startRow}:D${endRow}`).numberFormat = [['$#,##0.00']]
-
-        // Sync after each batch to avoid timeout
-        await context.sync()
+        updateStatus(
+          `Processing products: ${percent}% complete (chunk ${progress.completedChunks}/${progress.totalChunks})`
+        )
       }
+
+      // Process products in chunks
+      await processItemsInChunks(
+        async (productChunk, chunkIndex, totalChunks) => {
+          // Convert products to rows
+          const rowsChunk = productsToRows(productChunk)
+
+          // Calculate starting row (accounting for header row)
+          const startRow = chunkIndex * chunkSize + 2 // +2 because row 1 is header
+
+          // Write data for this chunk
+          const dataRange = `A${startRow}:AX${startRow + rowsChunk.length - 1}`
+
+          // Use processRangeInChunks for very large chunks
+          if (rowsChunk.length > 100) {
+            await processRangeInChunks(
+              context,
+              sheet,
+              rowsChunk,
+              `A${startRow}`,
+              { operationId: `${operationId}_subchunk_${chunkIndex}` }
+            )
+          } else {
+            // For smaller chunks, write directly
+            const range = sheet.getRange(dataRange)
+            range.values = rowsChunk
+            await context.sync()
+          }
+
+          // Apply minimal formatting for this chunk
+          sheet.getRange(
+            `D${startRow}:D${startRow + rowsChunk.length - 1}`
+          ).numberFormat = [['$#,##0.00']]
+          await context.sync()
+        },
+        products,
+        {
+          chunkSize,
+          operationId,
+          onProgress,
+          resumeFromChunk: options.resumeFromChunk || 0
+        }
+      )
 
       // Apply full formatting after all data is written
       await applyFormattingInBatch(context, sheet, totalProducts)
@@ -315,5 +439,52 @@ export async function syncLargeDataset(): Promise<void> {
       error instanceof Error ? error.message : 'Unknown error'
     updateStatus(`Error: ${errorMessage}`, true)
     console.error('Large dataset sync error:', error)
+  }
+}
+
+/**
+ * Resumes a previously interrupted large dataset sync operation
+ * @param operationId The ID of the operation to resume
+ */
+export async function resumeLargeDatasetSync(
+  operationId: string
+): Promise<void> {
+  try {
+    // Load progress from session storage
+    const progress = sessionStorage.getItem(
+      `${CHUNKING_CONFIG.PROGRESS_KEY_PREFIX}${operationId}`
+    )
+
+    if (!progress) {
+      updateStatus(
+        `No saved progress found for operation: ${operationId}`,
+        true
+      )
+      return
+    }
+
+    const progressData = JSON.parse(progress) as ChunkingProgress
+
+    if (progressData.status === 'completed') {
+      updateStatus(`Operation ${operationId} was already completed`)
+      return
+    }
+
+    updateStatus(
+      `Resuming operation from chunk ${progressData.completedChunks + 1}/${
+        progressData.totalChunks
+      }`
+    )
+
+    // Resume the operation
+    await syncLargeDataset({
+      operationId,
+      resumeFromChunk: progressData.completedChunks
+    })
+  } catch (error) {
+    const errorMessage =
+      error instanceof Error ? error.message : 'Unknown error'
+    updateStatus(`Resume error: ${errorMessage}`, true)
+    console.error('Resume operation error:', error)
   }
 }

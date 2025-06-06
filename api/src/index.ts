@@ -189,7 +189,7 @@ function generateComplexData() {
     popularity: number
   }> = []
 
-  for (let i = 1; i <= 1000; i++) {
+  for (let i = 1; i <= 10000; i++) {
     // Generate random name
     const randomAdjective =
       adjectives[Math.floor(Math.random() * adjectives.length)]

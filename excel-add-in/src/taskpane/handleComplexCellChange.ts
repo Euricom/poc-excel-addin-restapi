@@ -8,7 +8,8 @@ import {
   parseDate
 } from '../utils/complexProductUtils'
 import { ComplexProduct } from '../types/complexProduct'
-import { startTiming, endTiming } from '../utils/performanceUtils'
+import { startTiming, endTiming, timeAsync } from '../utils/performanceUtils'
+import { withExponentialBackoff } from '../utils/chunkingUtils'
 
 const API_BASE_URL = 'http://localhost:3001/api'
 
@@ -211,6 +212,7 @@ function queueUpdate(id: number, field: string, value: any): void {
 
 /**
  * Processes all pending updates in a single batch API call
+ * Uses chunking strategy for large batches and implements exponential backoff for retries
  */
 async function processPendingUpdates(): Promise<void> {
   if (pendingUpdates.length === 0) return
@@ -222,58 +224,13 @@ async function processPendingUpdates(): Promise<void> {
   updateStatus(`Sending ${pendingUpdates.length} updates to API...`)
 
   try {
-    // For single updates, use the original API endpoint
+    // For single updates, use the original API endpoint with retry logic
     if (pendingUpdates.length === 1) {
       const update = pendingUpdates[0]
-      const response = await fetch(`${API_BASE_URL}/update-cell2`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          id: update.id,
-          field: update.field,
-          value: update.value
-        })
-      })
 
-      if (!response.ok) {
-        throw new Error(`API error: ${response.status} ${response.statusText}`)
-      }
-
-      const result = await response.json()
-      if (result.success) {
-        updateStatus(`Updated ${update.field} successfully!`)
-      } else {
-        updateStatus(`Update failed: ${result.error || 'Unknown error'}`, true)
-      }
-    }
-    // For multiple updates, use a batch endpoint (assuming it exists)
-    // If not, fall back to sequential updates
-    else {
-      // Assuming a batch update endpoint exists
-      // If not, this would need to be replaced with sequential calls
-      const response = await fetch(`${API_BASE_URL}/batch-update-cells2`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify({
-          updates: pendingUpdates.map(u => ({
-            id: u.id,
-            field: u.field,
-            value: u.value
-          }))
-        })
-      })
-
-      // If batch endpoint doesn't exist, fall back to sequential updates
-      if (response.status === 404) {
-        let successCount = 0
-
-        // Process updates sequentially
-        for (const update of pendingUpdates) {
-          const singleResponse = await fetch(`${API_BASE_URL}/update-cell2`, {
+      await timeAsync('singleUpdate', async () => {
+        await withExponentialBackoff(async () => {
+          const response = await fetch(`${API_BASE_URL}/update-cell2`, {
             method: 'POST',
             headers: {
               'Content-Type': 'application/json'
@@ -285,28 +242,73 @@ async function processPendingUpdates(): Promise<void> {
             })
           })
 
-          if (singleResponse.ok) {
-            const result = await singleResponse.json()
-            if (result.success) {
-              successCount++
-            }
+          if (!response.ok) {
+            throw new Error(
+              `API error: ${response.status} ${response.statusText}`
+            )
           }
+
+          const result = await response.json()
+          if (result.success) {
+            updateStatus(`Updated ${update.field} successfully!`)
+          } else {
+            throw new Error(`Update failed: ${result.error || 'Unknown error'}`)
+          }
+        })
+      })
+    }
+    // For multiple updates, use chunking strategy and batch endpoint
+    else {
+      // Determine if we need to chunk the updates (if batch is very large)
+      const CHUNK_SIZE = 50 // Maximum updates per batch
+
+      if (pendingUpdates.length <= CHUNK_SIZE) {
+        // Process as a single batch with retry logic
+        await timeAsync('batchUpdate', async () => {
+          await processBatchWithRetry(pendingUpdates)
+        })
+      } else {
+        // Split into smaller chunks
+        const chunks = []
+        for (let i = 0; i < pendingUpdates.length; i += CHUNK_SIZE) {
+          chunks.push(pendingUpdates.slice(i, i + CHUNK_SIZE))
+        }
+
+        let successCount = 0
+        let totalProcessed = 0
+
+        // Process each chunk with progress updates
+        for (let i = 0; i < chunks.length; i++) {
+          const chunk = chunks[i]
+          updateStatus(
+            `Processing batch ${i + 1}/${chunks.length} (${
+              chunk.length
+            } updates)...`
+          )
+
+          try {
+            await timeAsync(`batchChunk-${i + 1}`, async () => {
+              const result = await processBatchWithRetry(chunk)
+              successCount += result.successCount
+              totalProcessed += chunk.length
+            })
+          } catch (error) {
+            console.error(`Error processing batch ${i + 1}:`, error)
+            totalProcessed += chunk.length
+          }
+
+          // Update progress
+          const percent = Math.round(
+            (totalProcessed / pendingUpdates.length) * 100
+          )
+          updateStatus(
+            `Batch progress: ${percent}% (${successCount} successful)`
+          )
         }
 
         updateStatus(
-          `Updated ${successCount} of ${pendingUpdates.length} changes successfully`
+          `Batch update completed: ${successCount} of ${pendingUpdates.length} changes applied`
         )
-      }
-      // Process batch response
-      else if (response.ok) {
-        const result = await response.json()
-        updateStatus(
-          `Batch update completed: ${
-            result.successCount || 'all'
-          } changes applied`
-        )
-      } else {
-        throw new Error(`API error: ${response.status} ${response.statusText}`)
       }
     }
   } catch (error) {
@@ -322,4 +324,114 @@ async function processPendingUpdates(): Promise<void> {
     // End timing for batch processing
     endTiming(batchTimerId)
   }
+}
+
+/**
+ * Process a batch of updates with retry logic
+ * @param batch Array of updates to process
+ * @returns Result with success count
+ */
+async function processBatchWithRetry(
+  batch: Array<{
+    id: number
+    field: string
+    value: any
+    timestamp: number
+  }>
+): Promise<{ successCount: number }> {
+  return await withExponentialBackoff(async () => {
+    // Try batch endpoint first
+    try {
+      const response = await fetch(`${API_BASE_URL}/batch-update-cells2`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json'
+        },
+        body: JSON.stringify({
+          updates: batch.map(u => ({
+            id: u.id,
+            field: u.field,
+            value: u.value
+          }))
+        })
+      })
+
+      // If batch endpoint exists and request was successful
+      if (response.ok) {
+        const result = await response.json()
+        return { successCount: result.successCount || batch.length }
+      }
+
+      // If batch endpoint doesn't exist (404), fall back to sequential updates
+      if (response.status === 404) {
+        return await processSequentialUpdatesWithRetry(batch)
+      }
+
+      // For other errors, throw to trigger retry
+      throw new Error(`API error: ${response.status} ${response.statusText}`)
+    } catch (error) {
+      // If there's a network error or other issue, try sequential updates
+      if (
+        error instanceof TypeError ||
+        (error instanceof Error && error.message.includes('Failed to fetch'))
+      ) {
+        return await processSequentialUpdatesWithRetry(batch)
+      }
+
+      // Re-throw other errors to trigger retry
+      throw error
+    }
+  })
+}
+
+/**
+ * Process updates sequentially with individual retries
+ * @param batch Array of updates to process
+ * @returns Result with success count
+ */
+async function processSequentialUpdatesWithRetry(
+  batch: Array<{
+    id: number
+    field: string
+    value: any
+    timestamp: number
+  }>
+): Promise<{ successCount: number }> {
+  let successCount = 0
+
+  for (const update of batch) {
+    try {
+      await withExponentialBackoff(async () => {
+        const response = await fetch(`${API_BASE_URL}/update-cell2`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json'
+          },
+          body: JSON.stringify({
+            id: update.id,
+            field: update.field,
+            value: update.value
+          })
+        })
+
+        if (!response.ok) {
+          throw new Error(
+            `API error: ${response.status} ${response.statusText}`
+          )
+        }
+
+        const result = await response.json()
+        if (result.success) {
+          successCount++
+        }
+      })
+    } catch (error) {
+      console.warn(
+        `Failed to update ${update.field} for product ${update.id}:`,
+        error
+      )
+    }
+  }
+
+  return { successCount }
 }
