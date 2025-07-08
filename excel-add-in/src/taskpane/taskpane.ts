@@ -146,9 +146,20 @@ async function applyFormulas(): Promise<void> {
           dataRowCount.toString()
         )
 
-        // Add formula in column C
+        // Add formula in column C and evaluate it
         const formulaCell = sheet.getRange(`C${rowIndex}`)
         formulaCell.formulas = [[processedFormula]]
+
+        // Sync to let Excel calculate the formula
+        await context.sync()
+
+        // Load the calculated value
+        formulaCell.load('values')
+        await context.sync()
+
+        // Replace the formula with the calculated value
+        const calculatedValue = formulaCell.values[0][0]
+        formulaCell.values = [[calculatedValue]]
       }
 
       // Auto-fit columns
