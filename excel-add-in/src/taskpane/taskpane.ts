@@ -74,9 +74,9 @@ async function applyFormulas(): Promise<void> {
       throw new Error(`API error: ${response.status} ${response.statusText}`)
     }
 
-    const data: FormulasResponse = await response.json()
+    const formulasData: FormulasResponse = await response.json()
 
-    if (!data.formulas || data.formulas.length === 0) {
+    if (!formulasData.formulas || formulasData.formulas.length === 0) {
       updateStatus('No formulas available from API')
       return
     }
@@ -85,31 +85,65 @@ async function applyFormulas(): Promise<void> {
     await Excel.run(async context => {
       const sheet = context.workbook.worksheets.getActiveWorksheet()
 
-      // Get the data range to know where our data ends
+      // Calculate where the data table ends (products + header row)
+      const dataRowCount = data.products ? data.products.length + 1 : 1 // +1 for header
+
+      // Look for existing summary section by checking for "Summary" header
+      let summaryStartRow = dataRowCount + 2 // Default position if no summary exists
+      let existingSummaryFound = false
+
+      // Check if there's already a summary section
       const usedRange = sheet.getUsedRange()
-      usedRange.load('rowCount')
+      usedRange.load(['rowCount', 'values'])
       await context.sync()
 
-      const lastRow = usedRange.rowCount
+      // Search for existing "Summary" header starting from after the data table
+      for (let i = dataRowCount + 1; i <= usedRange.rowCount; i++) {
+        try {
+          const cellRange = sheet.getRange(`A${i}`)
+          cellRange.load('values')
+          await context.sync()
 
-      // Add a header for the summary section
-      const summaryHeaderRange = sheet.getRange(`A${lastRow + 2}`)
+          if (cellRange.values[0][0] === 'Summary') {
+            summaryStartRow = i
+            existingSummaryFound = true
+            break
+          }
+        } catch (error) {
+          // Continue searching if cell doesn't exist
+          continue
+        }
+      }
+
+      // If summary exists, clear the existing summary section
+      if (existingSummaryFound) {
+        // Calculate how many rows to clear (summary header + formula rows)
+        const summaryRowsToDelete = 1 + formulasData.formulas.length // 1 for "Summary" header + formula count
+        const clearRange = sheet.getRange(
+          `A${summaryStartRow}:C${summaryStartRow + summaryRowsToDelete - 1}`
+        )
+        clearRange.clear()
+        await context.sync()
+      }
+
+      // Add the summary header
+      const summaryHeaderRange = sheet.getRange(`A${summaryStartRow}`)
       summaryHeaderRange.values = [['Summary']]
       summaryHeaderRange.format.font.bold = true
 
       // Process and apply each formula from the API
-      for (let i = 0; i < data.formulas.length; i++) {
-        const formula = data.formulas[i]
-        const rowIndex = lastRow + 3 + i
+      for (let i = 0; i < formulasData.formulas.length; i++) {
+        const formula = formulasData.formulas[i]
+        const rowIndex = summaryStartRow + 1 + i
 
         // Add label in column A
         const labelCell = sheet.getRange(`A${rowIndex}`)
         labelCell.values = [[formula.name]]
 
-        // Process the formula by replacing placeholders
+        // Process the formula by replacing placeholders with actual data row count
         const processedFormula = formula.formula.replace(
           /\{lastRow\}/g,
-          lastRow.toString()
+          dataRowCount.toString()
         )
 
         // Add formula in column C
@@ -121,7 +155,7 @@ async function applyFormulas(): Promise<void> {
       sheet.getUsedRange().format.autofitColumns()
 
       await context.sync()
-      updateStatus(`Applied ${data.formulas.length} formulas from API`)
+      updateStatus(`Applied ${formulasData.formulas.length} formulas from API`)
     })
   } catch (error) {
     const errorMessage =
