@@ -4,4 +4,5 @@ node_modules
 *.iml
 out
 gen
+# Mac
 .DS_Store
