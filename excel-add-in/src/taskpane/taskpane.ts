@@ -550,20 +550,6 @@ async function applyFormulas(
 }
 
 /**
- * Legacy wrapper for backward compatibility
- * @deprecated Use applyFormulas(options) instead
- */
-async function applyFormulasLegacy(): Promise<void> {
-  return applyFormulas({
-    enableCache: true,
-    batchSize: 1, // Use original behavior of processing one at a time
-    validateRanges: false, // Disable validation for backward compatibility
-    enableRetry: true,
-    maxRetries: 1
-  })
-}
-
-/**
  * Synchronize data from API to Excel
  */
 async function syncData(): Promise<void> {
@@ -800,6 +786,25 @@ async function sendUpdateToApi(updateData: CellUpdateRequest): Promise<void> {
 
     if (result.success) {
       updateStatus(`Updated ${updateData.field} successfully!`)
+
+      // Apply formulas after successful API update to ensure data consistency
+      try {
+        await applyFormulas({
+          enableCache: true,
+          batchSize: 5,
+          enableProgressTracking: false, // Disable progress tracking for cell updates to avoid UI spam
+          validateRanges: true,
+          enableRetry: true,
+          maxRetries: 2 // Reduced retries for cell updates
+        })
+      } catch (formulaError) {
+        // Log formula error but don't fail the cell update
+        console.warn(
+          'Formula reapplication failed after cell update:',
+          formulaError
+        )
+        updateStatus('Data updated, but formula refresh failed', true)
+      }
     } else {
       updateStatus(`Update failed: ${result.error || 'Unknown error'}`, true)
     }
