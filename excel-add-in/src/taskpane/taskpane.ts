@@ -9,12 +9,7 @@
 import { updateStatus } from '../utils/taskpaneUtils'
 import { syncData2 } from './syncData2'
 import { timeAsync, startTiming, endTiming } from '../utils/performanceUtils'
-import {
-  processItemsInChunks,
-  withExponentialBackoff,
-  ChunkingOptions,
-  ChunkingProgress
-} from '../utils/chunkingUtils'
+import { withExponentialBackoff } from '../utils/chunkingUtils'
 
 const API_BASE_URL = 'http://localhost:3001/api'
 
